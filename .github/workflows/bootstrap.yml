@@ -1,0 +1,54 @@
+name: Unpack Echo and build APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'bootstrap/trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  unpack-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore source archive
+        run: |
+          mkdir -p /tmp/echo-src
+          cat bootstrap/part*.txt | tr -d '\r\n ' | base64 -d > /tmp/echo-source.tar.xz
+          tar -xJf /tmp/echo-source.tar.xz -C /tmp/echo-src
+          cp -a /tmp/echo-src/echo/. .
+          rm -rf bootstrap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Upload complete Echo source" || true
+          git push
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Generate Android project
+        working-directory: mobile
+        run: |
+          npm install
+          npm run android
+
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: echo-apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
